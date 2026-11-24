@@ -1,0 +1,8 @@
+node_modules/
+/dist/
+.DS_Store
+
+# Maintainer-only files, kept on disk and out of the repository.
+/AGENTS.md
+/CLAUDE.md
+/docs/

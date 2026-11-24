@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$PLUGIN_ROOT/dist/codex-hook-main.js\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

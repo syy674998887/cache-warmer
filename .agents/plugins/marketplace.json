@@ -1,0 +1,14 @@
+{
+  "name": "cache-warmer",
+  "interface": {
+    "displayName": "Cache Warmer"
+  },
+  "plugins": [
+    {
+      "name": "cache-warmer",
+      "source": { "source": "local", "path": "./plugins/codex" },
+      "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" },
+      "category": "Productivity"
+    }
+  ]
+}

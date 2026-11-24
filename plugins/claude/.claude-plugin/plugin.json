@@ -1,0 +1,35 @@
+{
+  "name": "cache-warmer",
+  "displayName": "Cache Warmer",
+  "version": "0.1.0",
+  "description": "Keep this session's prompt cache warm while you are away, only when it costs less than a cold resume.",
+  "author": {
+    "name": "Untargetable",
+    "url": "https://github.com/syy674998887"
+  },
+  "homepage": "https://github.com/syy674998887/cache-warmer#readme",
+  "repository": "https://github.com/syy674998887/cache-warmer",
+  "license": "MIT",
+  "keywords": [
+    "prompt-cache",
+    "cache",
+    "keepalive"
+  ],
+  "network": {
+    "hosts": [
+      "raw.githubusercontent.com"
+    ]
+  },
+  "documentationUrl": "https://github.com/syy674998887/cache-warmer#readme",
+  "supportUrl": "https://github.com/syy674998887/cache-warmer/issues",
+  "experimental": {
+    "monitors": [
+      {
+        "name": "keeper",
+        "command": "node \"${CLAUDE_PLUGIN_ROOT}/dist/monitor-main.js\" \"${CLAUDE_PLUGIN_DATA}\"",
+        "description": "Cache Warmer：离开期间定时刷新 prompt cache",
+        "when": "always"
+      }
+    ]
+  }
+}

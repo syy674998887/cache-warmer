@@ -1,0 +1,12 @@
+{
+  "name": "cache-warmer",
+  "owner": { "name": "Untargetable" },
+  "description": "Cache Warmer for Claude Code",
+  "plugins": [
+    {
+      "name": "cache-warmer",
+      "source": "./plugins/claude",
+      "description": "Keep this session's prompt cache warm while you are away, only when it costs less than a cold resume."
+    }
+  ]
+}

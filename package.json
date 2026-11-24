@@ -1,0 +1,21 @@
+{
+  "name": "cache-warmer",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "description": "Claude Code / Codex plugins that keep a long-context session's prompt cache warm while you are away, only when it pays off.",
+  "type": "module",
+  "engines": {
+    "node": "^22.15.0 || >=23.8.0"
+  },
+  "scripts": {
+    "build": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "npm run build && node --test \"dist/test/**/*.test.js\"",
+    "package": "npm run build && node scripts/package-plugins.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.4",
+    "typescript": "^7.0.2"
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "name": "cache-warmer",
+  "version": "0.1.0",
+  "description": "Show this Codex session's prompt cache status, whether keeping it warm while you are away costs less than a cold resume, and keep it warm until you return.",
+  "author": {
+    "name": "Untargetable",
+    "url": "https://github.com/syy674998887"
+  },
+  "homepage": "https://github.com/syy674998887/cache-warmer#readme",
+  "repository": "https://github.com/syy674998887/cache-warmer",
+  "license": "MIT",
+  "keywords": [
+    "prompt-cache",
+    "cache"
+  ],
+  "interface": {
+    "displayName": "Cache Warmer",
+    "shortDescription": "Keep your prompt cache warm while you are away",
+    "longDescription": "Tell Cache Warmer how long you will be away. It prices keeping this session's prompt cache warm against a cold resume, from the session's own token usage and the model's prices, and keeps the cache warm only when that is cheaper. A summary on your return and a dashboard show what each run cost and saved. It reads token counts and timestamps, never message text.",
+    "developerName": "Untargetable",
+    "category": "Productivity",
+    "websiteURL": "https://github.com/syy674998887/cache-warmer",
+    "supportURL": "https://github.com/syy674998887/cache-warmer/issues"
+  }
+}
