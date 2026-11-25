@@ -68,7 +68,7 @@ export function startKeeper(s, o) {
     const firstFire = !cron
         ? undefined
         : o.firstFireInMinutes !== undefined
-            ? nextFireAt(warmUntil, s.ttlMinutes - o.firstFireInMinutes, now.getTime())
+            ? nextFireAt(warmUntil, s.ttlMinutes - o.firstFireInMinutes + 1, now.getTime())
             : nextFireAt(warmUntil, s.leadMinutes, now.getTime());
     if (cron && !firstFire)
         return "Cache Warmer 没有启动：cache 的有效期太短，排不进一次定时刷新。";

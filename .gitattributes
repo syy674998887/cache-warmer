@@ -1,0 +1,2 @@
+# The skills are copied into ~/.claude/skills as is: keep LF on Windows checkouts too.
+skills/** text eol=lf

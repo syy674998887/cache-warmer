@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { after, test } from "node:test";
 import { requestsSince } from "../src/claude.js";
 import { run } from "../src/commands.js";
-import { BEAT_MARKER, cronBeat, cronExpression, cronSnapshot, firePrompt, nextFireAt, onSkillPrompt } from "../src/cron.js";
+import { BEAT_MARKER, cronBeat, isHookFire, cronExpression, cronSnapshot, firePrompt, nextFireAt, onSkillPrompt } from "../src/cron.js";
 import { onStop } from "../src/hook.js";
 import { startKeeper, stopKeeper } from "../src/keeper.js";
 import { tick } from "../src/monitor.js";
@@ -80,13 +80,23 @@ test("cron expressions match one local minute, and fires land on whole minutes a
   const fire = new Date(2026, 10, 25, 9, 7);
   assert.equal(cronExpression(fire), "7 9 25 11 *");
   const now = new Date(2026, 10, 25, 9, 0, 20).getTime();
-  // 1h tier: 10 minutes before expiry, rounded down.
-  assert.deepEqual(nextFireAt(now + 60 * 60_000, 10, now), new Date(2026, 10, 25, 9, 50));
+  // 1h tier, planned with an 11-minute lead: the fire comes up to a minute later, never earlier, so by 50 minutes.
+  assert.deepEqual(nextFireAt(now + 60 * 60_000, 11, now), new Date(2026, 10, 25, 9, 50));
   // A fire due too soon moves to the next whole minute after a full minute.
-  assert.deepEqual(nextFireAt(now + 3 * 60_000, 1.5, now), new Date(2026, 10, 25, 9, 2));
-  assert.equal(nextFireAt(now + 90_000, 1.5, now), undefined);
+  assert.deepEqual(nextFireAt(now + 3 * 60_000, 2.5, now), new Date(2026, 10, 25, 9, 2));
+  assert.equal(nextFireAt(now + 90_000, 2.5, now), undefined);
+  // :00 and :30 may fire up to 90 seconds early, so they move a minute earlier.
+  assert.deepEqual(nextFireAt(now + 40 * 60_000, 11, now), new Date(2026, 10, 25, 9, 29));
+  // 5m tier: refreshes are never closer together than the 2.5 minutes the plan counted.
+  for (let second = 0; second < 60; second += 7) {
+    const t = new Date(2026, 10, 25, 9, 10, second).getTime();
+    const fire = nextFireAt(t + 5 * 60_000, 2.5, t)!.getTime();
+    assert.ok(fire - t >= 2.5 * 60_000 && fire < t + 5 * 60_000 - 60_000);
+  }
   assert.ok(firePrompt("hook").includes(BEAT_MARKER));
   assert.equal(firePrompt("skill"), `/${BEAT_MARKER}`);
+  assert.ok(isHookFire(`<scheduled>${firePrompt("hook")}</scheduled>`));
+  assert.ok(!isHookFire(`把 prompt 含 ${BEAT_MARKER} 的定时任务删掉`));
 });
 
 test("the cron route prices each refresh as two requests and uses the skill's own start command", () => {
@@ -147,10 +157,11 @@ test("a user prompt while tasks are pending ends the run and asks Claude to dele
   assert.equal(onSkillPrompt(f.dataDir, f.sessionId, "/cache-warmer", "user", at(60)), undefined);
   assert.equal(onSkillPrompt(f.dataDir, f.sessionId, `/${BEAT_MARKER}`, "schedule_wakeup", at(60)), undefined);
   assert.equal(onSkillPrompt(f.dataDir, f.sessionId, "task done", "system", at(60)), undefined);
+  assert.equal(onSkillPrompt(f.dataDir, f.sessionId, "<task-notification>done</task-notification>", undefined, at(60)), undefined);
   assert.equal(f.state().outcome, null);
 
-  // Payloads may omit the source: a plain prompt then counts as the user's.
-  const context = onSkillPrompt(f.dataDir, f.sessionId, "继续", undefined, at(70))!;
+  // Payloads may omit the source: a plain prompt then counts as the user's, even one that names the fire marker.
+  const context = onSkillPrompt(f.dataDir, f.sessionId, `把 prompt 含 ${BEAT_MARKER} 的定时任务删掉`, undefined, at(70))!;
   assert.match(context, /用户回来了/);
   assert.match(context, /CronDelete/);
   assert.equal(f.state().outcome, "warm");

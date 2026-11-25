@@ -1,6 +1,7 @@
 ---
 name: cache-warmer-beat
 description: Cache Warmer 的定时刷新，只由 /cache-warmer start --via skill 设下的定时任务触发。不要自己调用。
+allowed-tools: Bash(node "${CLAUDE_SKILL_DIR}/../cache-warmer/dist/cli.js" *)
 ---
 
 !`node "${CLAUDE_SKILL_DIR}/../cache-warmer/dist/cli.js" beat --session "${CLAUDE_SESSION_ID}"`

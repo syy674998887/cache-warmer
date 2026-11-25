@@ -36,8 +36,11 @@ export function onStop(dataDir, sessionId, transcriptPath) {
  */
 export function onSessionEnd(dataDir, sessionId, now = new Date()) {
     const state = readState(dataDir, sessionId);
-    if (state && state.outcome === null)
-        finishRun(dataDir, stopState(state, "切换了会话，保温自动停止"), "failed", now);
+    if (!state || state.outcome !== null)
+        return;
+    // The skill's hook runs on every way out: its scheduled tasks and hooks go with the session.
+    const reason = state.driver === "cron" ? "会话结束或切换了，保温自动停止" : "切换了会话，保温自动停止";
+    finishRun(dataDir, stopState(state, reason), "failed", now);
 }
 /**
  * The CLI arguments that answer a typed command without a model turn. A start with a duration is left to its skill:

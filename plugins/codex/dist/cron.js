@@ -32,12 +32,17 @@ export function cronExpression(fire) {
     return `${fire.getMinutes()} ${fire.getHours()} ${fire.getDate()} ${fire.getMonth() + 1} *`;
 }
 /**
- * When to fire so the cache is read `leadMinutes` before it expires at `warmUntil`. CronCreate fires on whole minutes,
- * so it rounds down; and at least a full minute after now, so the task is not already in the past when it is created.
+ * When to fire so the cache is read about `leadMinutes` before it expires at `warmUntil`. CronCreate fires on whole
+ * minutes, so the fire may come up to a minute after `warmUntil - leadMinutes`, never before it: refreshes are then at
+ * least `ttl - lead` apart, as the plan counted them. It also lands at least a full minute after now, so the task is not
+ * already past when Claude creates it, and off :00 and :30, which one-shot tasks may fire up to 90 seconds early.
  * Undefined when no minute fits before expiry.
  */
 export function nextFireAt(warmUntil, leadMinutes, now) {
-    const fire = Math.max(Math.floor((warmUntil - leadMinutes * MINUTE) / MINUTE) * MINUTE, Math.ceil(now / MINUTE) * MINUTE + MINUTE);
+    const earliest = Math.ceil(now / MINUTE) * MINUTE + MINUTE;
+    let fire = Math.max(Math.floor((warmUntil - (leadMinutes - 1) * MINUTE) / MINUTE) * MINUTE, earliest);
+    if (new Date(fire).getMinutes() % 30 === 0)
+        fire = fire - MINUTE >= earliest ? fire - MINUTE : fire + MINUTE;
     return fire < warmUntil ? new Date(fire) : undefined;
 }
 /** The step Claude takes after the CLI's output: create the next task, then say only when it fires. */
@@ -50,15 +55,23 @@ export function scheduleStep(fire, via) {
 /** Removes the skill's pending tasks, for the stop command, a new start, and the user coming back. */
 export const DELETE_STEP = `调用 CronList，找到 prompt 里含 ${BEAT_MARKER} 的定时任务，逐个用 CronDelete 删掉`;
 /**
+ * Whether a prompt is one of the hook route's fires: it holds the whole fire prompt, not just the marker, so a user
+ * asking about the tasks is not a fire, while a fire Claude Code wraps in other text still is.
+ */
+export function isHookFire(prompt) {
+    return prompt.includes(firePrompt("hook"));
+}
+/**
  * The economics of the cron route. Each fire is two requests – the fire prompt, then the reply after CronCreate's
  * result – so a refresh reads the context twice and writes about twice the tail. Not measured yet: an estimate.
- * Fires land on whole minutes, so the 5-minute tier gets a wider lead.
+ * Fires land up to a minute after the lead (see nextFireAt), so the plan's lead is one minute wider than the latest
+ * safe fire: on the 1h tier fires still come by 50 minutes, before idle compaction at about 54.
  */
 export function cronSnapshot(s) {
     return {
         ...s,
         startCommand: START_SKILL,
-        leadMinutes: s.ttlMinutes <= 5 ? 1.5 : s.leadMinutes,
+        leadMinutes: s.ttlMinutes <= 5 ? 2.5 : s.leadMinutes + 1,
         overheadScaled: 2 * s.overheadScaled + s.contextTokens * s.price.readBp,
         notes: [...s.notes, "skill 版每次刷新是两次请求（定时消息一次，设好下一个定时任务后的回复一次），比插件版贵，持平点也更低。"],
     };
@@ -145,19 +158,24 @@ export function cronBeat(dataDir, sessionId, now = new Date()) {
     return `Cache Warmer：第 ${counted.beats} 次刷新。\n${scheduleStep(fire, via)}`;
 }
 /**
- * The skill's UserPromptSubmit hook. Reads only whether the prompt is a slash command or carries the fire marker; the
- * text itself is never stored. Returns the context to add, if any.
+ * The skill's UserPromptSubmit hook. Reads only whether the prompt is a slash command, a wrapped notification or
+ * exactly the fire prompt; the text itself is never stored. Returns the context to add, if any.
  *   - a fire on the hook route: the beat;
  *   - a slash command (including the skill route's /cache-warmer-beat): nothing, the command handles itself;
+ *   - a turn Claude Code starts itself, such as a finished background task: nothing;
  *   - any other prompt from the user: they are back, so the run is settled and the pending task removed.
  */
 export function onSkillPrompt(dataDir, sessionId, prompt, source, now = new Date()) {
-    if (prompt.trimStart().startsWith("/"))
+    const text = prompt.trimStart();
+    if (text.startsWith("/"))
         return undefined;
-    if (prompt.includes(BEAT_MARKER) && source !== "user")
+    if (isHookFire(prompt) && source !== "user")
         return cronBeat(dataDir, sessionId, now);
     // Payloads may omit the source; when present, only the user's own prompts end a run.
     if (source !== undefined && source !== "user")
+        return undefined;
+    // Notifications of finished background work arrive wrapped in a tag such as <task-notification>.
+    if (text.startsWith("<"))
         return undefined;
     const state = readState(dataDir, sessionId);
     if (!state || state.driver !== "cron" || state.outcome !== null)

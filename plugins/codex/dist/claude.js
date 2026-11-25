@@ -80,6 +80,23 @@ export function userReturnedAt(transcriptPath, since) {
     }
     return earliest;
 }
+/**
+ * The metadata of the newest record that started a turn – a typed prompt, a command, a notification or a scheduled
+ * prompt – for the skill's test log. Never the message text.
+ */
+export function latestPromptMeta(transcriptPath) {
+    for (const line of readLinesReverse(transcriptPath)) {
+        if (!line.includes('"type":"user"'))
+            continue;
+        const record = parseLine(line);
+        if (!record || record.type !== "user" || record.isSidechain === true)
+            continue;
+        if (record.origin === undefined && record.promptSource === undefined && record.isMeta === undefined)
+            continue;
+        return { at: String(record.timestamp), origin: record.origin ?? null, promptSource: record.promptSource ?? null, isMeta: record.isMeta ?? null };
+    }
+    return undefined;
+}
 /** Start times of the main-conversation requests after `since`, newest first. */
 export function requestStartsSince(transcriptPath, since) {
     const starts = [];

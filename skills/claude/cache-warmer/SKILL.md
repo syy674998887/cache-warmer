@@ -8,18 +8,18 @@ hooks:
   UserPromptSubmit:
     - hooks:
         - type: command
-          command: 'node "${CLAUDE_SKILL_DIR}/dist/skill-hook-main.js" || node "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/cache-warmer/dist/skill-hook-main.js"'
+          command: 'node "${CLAUDE_PLUGIN_ROOT}/dist/skill-hook-main.js" || node "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/cache-warmer/dist/skill-hook-main.js"'
           timeout: 10
   Stop:
     - hooks:
         - type: command
-          command: 'node "${CLAUDE_SKILL_DIR}/dist/skill-hook-main.js" || node "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/cache-warmer/dist/skill-hook-main.js"'
+          command: 'node "${CLAUDE_PLUGIN_ROOT}/dist/skill-hook-main.js" || node "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/cache-warmer/dist/skill-hook-main.js"'
           timeout: 10
   SessionEnd:
-    - matcher: clear|resume
-      hooks:
+    - hooks:
         - type: command
-          command: 'node "${CLAUDE_SKILL_DIR}/dist/skill-hook-main.js" || node "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/cache-warmer/dist/skill-hook-main.js"'
+          command: 'node "${CLAUDE_PLUGIN_ROOT}/dist/skill-hook-main.js" || node "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/cache-warmer/dist/skill-hook-main.js"'
+          timeout: 10
 ---
 
 !`node "${CLAUDE_SKILL_DIR}/dist/cli.js" $ARGUMENTS --provider claude --session "${CLAUDE_SESSION_ID}" --driver cron`
