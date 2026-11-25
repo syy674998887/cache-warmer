@@ -12,6 +12,12 @@ import { finishRun, readState, sameRun, stopState, writeState } from "./state.js
 export function onStop(dataDir: string, sessionId: string, transcriptPath: string): string | undefined {
   const state = readState(dataDir, sessionId);
   if (!state || state.summaryShown) return undefined;
+  if (state.driver === "cron") {
+    // The skill's UserPromptSubmit hook settles a cron run when the user is back: fires leave records this check can't tell apart.
+    if (state.outcome === null) return undefined;
+    writeState(dataDir, { ...state, summaryShown: true });
+    return runSummary(state);
+  }
   const returnedAt = userReturnedAt(transcriptPath, new Date(state.startedAt));
   if (!returnedAt) return undefined;
   if (state.outcome === null) settleReturn(dataDir, state, transcriptPath, returnedAt);

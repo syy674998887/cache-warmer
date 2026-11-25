@@ -1,11 +1,16 @@
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { claudeConfigDir } from "./claude.js";
 import { parseLine } from "./jsonl.js";
 /** Format of the state files; a monitor started before an update that changed it cannot run newer runs. */
 export const STATE_VERSION = 3;
 /** A monitor that has not written its heartbeat for this long is gone. It writes one on every 15-second poll. */
 const HEARTBEAT_STALE_MS = 60_000;
 const HEARTBEAT_PRUNE_MS = 24 * 60 * 60_000;
+/** Where the standalone skill keeps its state: it has no plugin data directory. */
+export function defaultDataDir() {
+    return join(claudeConfigDir(), "cache-warmer");
+}
 function statePath(dataDir, sessionId) {
     return join(dataDir, "sessions", `${sessionId}.json`);
 }

@@ -4,6 +4,7 @@ import { findTranscript } from "./claude.js";
 import { DEFAULT_GRACE, formatMinutes, parseDurationMinutes } from "./duration.js";
 import { awayVerdict, keepPlan } from "./economics.js";
 import { formatClock, formatUsd, formatWan } from "./format.js";
+import { chargePending, DELETE_STEP, nextFireAt, scheduleStep, STOP_SKILL, type Via } from "./cron.js";
 import { settleReturn } from "./monitor.js";
 import { codexSleepMs, type SessionSnapshot } from "./session.js";
 import { monitorAlive, readState, sameRun, STATE_VERSION, writeState, type KeeperState, type RunRecord } from "./state.js";
@@ -15,6 +16,11 @@ export interface StartOptions {
   graceText: string;
   force: boolean;
   awake: boolean;
+  /** The standalone skill: refreshes are scheduled tasks instead of monitor beats. */
+  driver?: "cron";
+  via?: Via;
+  /** For testing the cron route: the first fire comes this many minutes after the start instead of near expiry. */
+  firstFireInMinutes?: number;
   now?: Date;
 }
 
@@ -35,7 +41,7 @@ export function startKeeper(s: SessionSnapshot, o: StartOptions): string {
     const options = `${o.graceText === DEFAULT_GRACE ? "" : ` --grace ${o.graceText}`}${o.awake ? "" : " --no-awake"}`;
     return [
       `Cache Warmer 没有启动：${away}需要刷新 ${verdict.refreshes} 次，超过持平点（${plan.breakEvenRefreshes} 次），`,
-      `保温会比冷启动多花约 ${pct}%。如果仍要保温，执行 ${START_COMMAND[s.provider]} ${o.awayText}${options} --force。`,
+      `保温会比冷启动多花约 ${pct}%。如果仍要保温，执行 ${s.startCommand ?? START_COMMAND[s.provider]} ${o.awayText}${options} --force。`,
     ].join("\n");
   }
 
@@ -63,14 +69,24 @@ export function startKeeper(s: SessionSnapshot, o: StartOptions): string {
   }
 
   if (!o.dataDir) throw new Error("缺少 --data");
+  const cron = o.driver === "cron";
   // Writing a run that no monitor will execute would leave the user away with a cache that silently expires.
-  if (!monitorAlive(o.dataDir, s.id, now)) return monitorDown(s.id);
+  if (!cron && !monitorAlive(o.dataDir, s.id, now)) return monitorDown(s.id);
   // Starting again means the user is here, which settles the session's previous run.
   const previous = readState(o.dataDir, s.id);
   const transcriptPath = findTranscript(s.id);
   if (previous && previous.outcome === null && transcriptPath) {
-    settleReturn(o.dataDir, previous, transcriptPath, now, "重新执行了 start");
+    const pending = previous.driver === "cron" ? chargePending(previous, transcriptPath) : previous;
+    settleReturn(o.dataDir, pending, transcriptPath, now, "重新执行了 start");
   }
+  // The start turn's own request reads the cache, so the first fire counts from now.
+  const warmUntil = now.getTime() + s.ttlMinutes * 60_000;
+  const firstFire = !cron
+    ? undefined
+    : o.firstFireInMinutes !== undefined
+      ? nextFireAt(warmUntil, s.ttlMinutes - o.firstFireInMinutes, now.getTime())
+      : nextFireAt(warmUntil, s.leadMinutes, now.getTime());
+  if (cron && !firstFire) return "Cache Warmer 没有启动：cache 的有效期太短，排不进一次定时刷新。";
   const state: KeeperState = {
     version: STATE_VERSION,
     sessionId: s.id,
@@ -99,8 +115,23 @@ export function startKeeper(s: SessionSnapshot, o: StartOptions): string {
     endedAt: null,
     savedScaled: null,
     summaryShown: false,
+    ...(cron ? { driver: "cron" as const, via: o.via ?? "hook", nextFireAt: firstFire!.toISOString() } : {}),
   };
   writeState(o.dataDir, state);
+
+  if (cron) {
+    if (awake) keepAwakeUntil(deadline, now);
+    lines.push(
+      `每次刷新时，对话里会出现一条 Cache Warmer 的定时消息（含 cache-warmer-beat）和 Claude 的回复；第一次在 ${formatClock(firstFire!)}。`,
+      `你回来输入任何消息就会自动停止（斜杠命令不算）；提前取消用 ${STOP_SKILL}。`,
+      awake ? "截止之前会阻止系统空闲休眠；合上盖子仍会休眠，保温也会中断。" : "保温期间电脑不能睡眠，否则定时任务不会触发，保温会中断。",
+    );
+    // A pending task of the previous run would fire into this one.
+    const cleanup = previous?.driver === "cron" && previous.status === "active" && previous.outcome === null;
+    if (cleanup) lines.push(`下一步之前：先${DELETE_STEP}。`);
+    lines.push(scheduleStep(firstFire!, state.via!));
+    return lines.join("\n");
+  }
 
   lines.push(
     "每次刷新时，对话里会出现一条 cache-warmer 的「暂停并等待」通知和 Claude 的一条回复。",
@@ -129,10 +160,19 @@ export function stopKeeper(dataDir: string, sessionId: string, now = new Date())
   if (!state || state.outcome !== null) return "Cache Warmer：本会话没有正在进行的保温。";
   const transcriptPath = findTranscript(sessionId);
   if (!transcriptPath) throw new Error(`找不到会话 ${sessionId} 的 transcript`);
-  settleReturn(dataDir, state, transcriptPath, now, "用户执行了 /cache-warmer:stop");
+  const cron = state.driver === "cron";
+  settleReturn(
+    dataDir,
+    cron ? chargePending(state, transcriptPath) : state,
+    transcriptPath,
+    now,
+    `用户执行了 ${cron ? STOP_SKILL : "/cache-warmer:stop"}`,
+  );
   const latest = sameRun(dataDir, state);
   if (!latest || latest.outcome === null) return "Cache Warmer：本会话没有正在进行的保温。";
   writeState(dataDir, { ...latest, summaryShown: true });
+  // A task scheduled for the next fire would otherwise still go off.
+  if (cron && state.status === "active") return `${runSummary(latest)}\n下一步：${DELETE_STEP}，然后只回复「Cache Warmer：已停止」。`;
   return runSummary(latest);
 }
 
@@ -142,6 +182,7 @@ export function keeperStatusLine(dataDir: string, sessionId: string): string | u
   if (!state || state.outcome !== null) return undefined;
   if (state.status === "active") {
     const progress = `保温进行中：已刷新 ${state.beats}/${state.plannedBeats} 次，截止 ${formatClock(new Date(state.deadline))}。`;
+    if (state.driver === "cron") return state.nextFireAt ? `${progress}下次刷新 ${formatClock(new Date(state.nextFireAt))}。` : progress;
     return monitorAlive(dataDir, sessionId) ? progress : `${progress}\n${monitorDown(sessionId)}`;
   }
   return `保温已结束（${state.stopReason}），cache 保持到 ${formatClock(new Date(state.warmUntil!))}。`;

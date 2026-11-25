@@ -1,5 +1,6 @@
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { claudeConfigDir } from "./claude.js";
 import { parseLine } from "./jsonl.js";
 
 /** The user came back to a warm cache, came back after it expired (or never did), or the run broke off. */
@@ -50,6 +51,20 @@ export interface KeeperState {
   savedScaled: number | null;
   /** Whether the user has seen the run's summary, from the Stop hook or the stop command. */
   summaryShown: boolean;
+  /**
+   * Set by the standalone skill: no monitor runs, and each refresh is a one-shot CronCreate task that Claude schedules
+   * for the next one. Absent for the plugin's monitor-driven runs.
+   */
+  driver?: "cron";
+  /** How a cron fire reaches the CLI: the skill's UserPromptSubmit hook, or a `!` command in the beat skill. */
+  via?: "hook" | "skill";
+  /** When the scheduled fire is due; null once no further fire is scheduled. */
+  nextFireAt?: string | null;
+}
+
+/** Where the standalone skill keeps its state: it has no plugin data directory. */
+export function defaultDataDir(): string {
+  return join(claudeConfigDir(), "cache-warmer");
 }
 
 /** What a run shows in its summary and in the history, whichever CLI kept the cache warm. */

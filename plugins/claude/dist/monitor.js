@@ -11,7 +11,8 @@ export const MIN_HIT_RATIO = 0.9;
 /** One poll of the keeper for one session: verify a pending refresh, stop, fire the next refresh, or settle the run. */
 export function tick(ctx) {
     const state = readState(ctx.dataDir, ctx.sessionId);
-    if (!state || state.outcome !== null) {
+    // A run the standalone skill keeps warm with scheduled tasks is never this monitor's to drive.
+    if (!state || state.outcome !== null || state.driver === "cron") {
         ctx.setAwake(false);
         return;
     }
@@ -95,6 +96,6 @@ export function settleReturn(dataDir, state, transcriptPath, at, reason = "ä½ å›
     return finishRun(dataDir, ended, returnOutcome(state, at, requestStartsSince(transcriptPath, new Date(state.startedAt))), at);
 }
 /** What one request cost: cache reads, cache writes at the session's TTL tier, uncached input and output. */
-function costScaled(usage, state) {
+export function costScaled(usage, state) {
     return usage.cacheRead * state.readBp + usage.cacheWrite * state.coldBp + usage.input * 10000 + usage.output * state.outputBp;
 }

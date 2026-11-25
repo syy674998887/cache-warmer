@@ -11,6 +11,13 @@ export function onStop(dataDir, sessionId, transcriptPath) {
     const state = readState(dataDir, sessionId);
     if (!state || state.summaryShown)
         return undefined;
+    if (state.driver === "cron") {
+        // The skill's UserPromptSubmit hook settles a cron run when the user is back: fires leave records this check can't tell apart.
+        if (state.outcome === null)
+            return undefined;
+        writeState(dataDir, { ...state, summaryShown: true });
+        return runSummary(state);
+    }
     const returnedAt = userReturnedAt(transcriptPath, new Date(state.startedAt));
     if (!returnedAt)
         return undefined;

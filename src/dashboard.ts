@@ -13,16 +13,17 @@ const where = (s: Pick<RunRecord, "cwd">) => basename(s.cwd);
 const mine = (s: Pick<RunRecord, "sessionId">, sessionId: string | undefined) => (s.sessionId === sessionId ? "（本会话）" : "");
 
 /** Every settled keep-warm run: what it cost, what it saved, and the runs still open. */
-export function dashboard(dataDir: string, sessionId: string | undefined, now = new Date()): string {
+export function dashboard(dataDir: string, sessionId: string | undefined, now = new Date(), startCommand: string = START_COMMAND.claude): string {
   // Settled first, so that a run nobody else will settle shows up in the totals of this very output.
   const open = openStates(dataDir).filter((s) => monitorAlive(dataDir, s.sessionId, now) || !settleOrphan(dataDir, s, now));
   const openLines = open.map((s) => {
-    const lost = monitorAlive(dataDir, s.sessionId, now) ? "" : "（monitor 失联）";
+    // The skill's runs have no monitor: scheduled tasks drive them.
+    const lost = s.driver === "cron" || monitorAlive(dataDir, s.sessionId, now) ? "" : "（monitor 失联）";
     return s.status === "active"
       ? `进行中 · ${where(s)} · 已刷新 ${s.beats}/${s.plannedBeats} 次，截止 ${formatClock(new Date(s.deadline))}${lost}${mine(s, sessionId)}`
       : `等你回来 · ${where(s)} · 已刷新 ${s.beats} 次，cache 保持到 ${formatClock(new Date(s.warmUntil!))}${lost}${mine(s, sessionId)}`;
   });
-  return renderRuns(readHistory(dataDir), openLines, sessionId, START_COMMAND.claude);
+  return renderRuns(readHistory(dataDir), openLines, sessionId, startCommand);
 }
 
 /** The same report for Codex, worked out from the rollouts on each call: they are the only record of its runs. */
@@ -68,14 +69,15 @@ function settleOrphan(dataDir: string, state: KeeperState, now: Date): boolean {
   const transcriptPath = findTranscript(state.sessionId);
   if (!transcriptPath) return false;
   const since = new Date(state.startedAt);
-  const returnedAt = userReturnedAt(transcriptPath, since);
+  // A cron run is settled by the skill's hook when the user is back; scheduled fires leave records this check can't tell apart.
+  const returnedAt = state.driver === "cron" ? undefined : userReturnedAt(transcriptPath, since);
   if (returnedAt) return settleReturn(dataDir, state, transcriptPath, returnedAt) !== undefined;
   const expiry = effectiveExpiry(state, requestStartsSince(transcriptPath, since));
   // A run done refreshing is shown and archived with the expiry that later requests may have extended.
   if (state.status === "stopped") state.warmUntil = new Date(expiry).toISOString();
   if (now.getTime() < expiry) return false;
   // Still refreshing when the monitor went away: the run broke off. Done refreshing: the cache ran out unattended.
-  const ended = state.status === "active" ? stopState(state, "monitor 不在了（会话可能已关闭），保温中断") : state;
+  const ended = state.status === "active" ? stopState(state, state.driver === "cron" ? "定时刷新没有按时触发（会话可能已关闭），保温中断" : "monitor 不在了（会话可能已关闭），保温中断") : state;
   return finishRun(dataDir, ended, state.status === "active" ? "failed" : "cold", new Date(expiry)) !== undefined;
 }
 

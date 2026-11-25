@@ -14,7 +14,7 @@ export function economicsParams(s) {
 }
 /** What start shows without a duration: the cache now, a refresh against a cold resume, and the break-even point. */
 export function analysis(s, status, now = new Date()) {
-    const start = START_COMMAND[s.provider];
+    const start = s.startCommand ?? START_COMMAND[s.provider];
     return renderAnalysis({
         modelLabel: s.price.label,
         modelId: s.modelId,

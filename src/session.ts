@@ -20,6 +20,8 @@ export interface SessionSnapshot {
   /** Extra cost of one refresh turn beyond reading the context, in tokens x basis points. */
   overheadScaled: number;
   notes: string[];
+  /** How the user starts keeping warm, when not the plugin's command: the standalone skill's. */
+  startCommand?: string;
 }
 
 // Measured on 2026-10-01. Claude Code (Opus 5.5, pause-and-wait beat): after the first, each keep-alive turn wrote

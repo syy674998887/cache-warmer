@@ -32,7 +32,8 @@ export interface TickContext {
 /** One poll of the keeper for one session: verify a pending refresh, stop, fire the next refresh, or settle the run. */
 export function tick(ctx: TickContext): void {
   const state = readState(ctx.dataDir, ctx.sessionId);
-  if (!state || state.outcome !== null) {
+  // A run the standalone skill keeps warm with scheduled tasks is never this monitor's to drive.
+  if (!state || state.outcome !== null || state.driver === "cron") {
     ctx.setAwake(false);
     return;
   }
@@ -122,6 +123,6 @@ export function settleReturn(
 }
 
 /** What one request cost: cache reads, cache writes at the session's TTL tier, uncached input and output. */
-function costScaled(usage: RequestUsage, state: KeeperState): number {
+export function costScaled(usage: RequestUsage, state: KeeperState): number {
   return usage.cacheRead * state.readBp + usage.cacheWrite * state.coldBp + usage.input * 10000 + usage.output * state.outputBp;
 }

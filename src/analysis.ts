@@ -18,7 +18,7 @@ export function economicsParams(s: SessionSnapshot): EconomicsParams {
 
 /** What start shows without a duration: the cache now, a refresh against a cold resume, and the break-even point. */
 export function analysis(s: SessionSnapshot, status: string | undefined, now = new Date()): string {
-  const start = START_COMMAND[s.provider];
+  const start = s.startCommand ?? START_COMMAND[s.provider];
   return renderAnalysis({
     modelLabel: s.price.label,
     modelId: s.modelId,

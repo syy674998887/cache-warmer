@@ -30,7 +30,7 @@ type Usage = {
   cache_creation?: { ephemeral_1h_input_tokens?: number; ephemeral_5m_input_tokens?: number };
 };
 
-function claudeConfigDir(): string {
+export function claudeConfigDir(): string {
   return process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), ".claude");
 }
 
@@ -120,6 +120,28 @@ export function requestStartsSince(transcriptPath: string, since: Date): Date[] 
     }
   }
   return starts;
+}
+
+/** The main-conversation requests after `since`, oldest first, each with the usage of its response. */
+export function requestsSince(transcriptPath: string, since: Date): { start: Date; usage: RequestUsage }[] {
+  const requests: { start: Date; usage: RequestUsage }[] = [];
+  let answer: Usage | undefined;
+  for (const line of readLinesReverse(transcriptPath)) {
+    if (!line.includes('"type":"assistant"') && !line.includes('"type":"user"')) continue;
+    const record = parseLine(line);
+    if (!record || record.isSidechain === true || typeof record.timestamp !== "string") continue;
+    const at = new Date(record.timestamp);
+    if (at <= since) break;
+    const message = record.message as { model?: string; usage?: Usage } | undefined;
+    if (record.type === "assistant") {
+      // Reading backwards, the first response met is the newest record of its request, with its final usage.
+      if (!answer && message?.usage && message.model && message.model !== "<synthetic>") answer = message.usage;
+    } else if (answer) {
+      requests.push({ start: at, usage: toRequestUsage(answer) });
+      answer = undefined;
+    }
+  }
+  return requests.reverse();
 }
 
 function writeTier(usage: Usage): TtlTier | undefined {
